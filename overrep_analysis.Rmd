@@ -10,16 +10,16 @@ set.seed(10202005)
 ```
 
 ```{r load-packages}
-if (!requireNamespace("BiocManager", quietly = TRUE)) 
-         install.packages("BiocManager")
-install.packages("data.table")
-BiocManager::install("Rgraphviz")
+#if (!requireNamespace("BiocManager", quietly = TRUE)) 
+#         install.packages("BiocManager")
+#install.packages("data.table")
+#BiocManager::install("Rgraphviz")
 #BiocManager::install("topGO", force = TRUE)
-
-pacman::p_load("topGo", "dplyr", "tidyverse", "tidyr", "readr", "stringr", "data.table", install = FALSE)
+library("topGO")
+pacman::p_load("dplyr", "tidyverse", "tidyr", "readr", "stringr", "data.table", install = FALSE)
 ```
 
-```{r load-data}
+```{r load-egg-data}
  # get the necessary information from the eggNOG output file
 
 # read the total transcriptome (universe)
@@ -37,7 +37,7 @@ e_4.4_names <- fread("data/e_4.4_annotations.tsv", sep = "\t", select = 1)
 e_4.5_names <- fread("data/e_4.5_annotations.tsv", sep = "\t", select = 1)
 ```
 
-```{r mobile_to_transcriptome_go}
+```{r egg-mobile_to_transcriptome_go}
 go <- as.data.frame(etotal[,c(1,10)])
 geneID2GO <- go %>%
   mutate(GO_list = strsplit(GOs, "[,|]")) %>%
@@ -45,7 +45,7 @@ geneID2GO <- go %>%
   deframe()
 
 # Make a named factor (1 = DEG, 0 = background)
-all_genes <- go_split$`#query`
+all_genes <- etotal$`#query`
 str(all_genes)
 mob_geneList <- factor(as.integer(all_genes %in% emobile_names$`#query`))
 str(mob_geneList)
@@ -71,12 +71,131 @@ goResults <- GenTable(GOdata,
                       topNodes = 20)
 
 print(goResults)
-write.csv(goResults, file = paste(paste("results/mobile_enr", annot_type, sep = ""), ".csv", sep = ""), row.names = FALSE)
-topGO::printGraph(GOdata, resultFisher, firstSigNodes = 10, useInfo = "def", pdfSW = TRUE, fn.prefix = sprintf("figures/tree_%s", annot_type))
+write.csv(goResults, file = paste(paste("results/emobile_enr", annot_type, sep = ""), ".csv", sep = ""), row.names = FALSE)
+topGO::printGraph(GOdata, resultFisher, firstSigNodes = 10, useInfo = "def", pdfSW = TRUE, fn.prefix = sprintf("figures/etree_%s", annot_type))
 }
 ```
 
-```{r clusters_to_transcriptome_go}
+```{r egg-clusters_to_transcriptome_go}
+for (cluster in c("e_4.1", "e_4.2", "e_4.3", "e_4.4", "e_4.5")){
+  geneList <- factor(as.integer(all_genes %in% eval(parse(text = paste(cluster, "_names", sep ="")))$`#query`))
+  names(geneList) <- all_genes
+  
+  for (annot_type in c("BP", "CC", "MF")){
+# === CREATE topGO OBJECT ===
+  GOdata <- new("topGOdata",
+              ontology = annot_type,  # Can be "BP", "MF", or "CC"
+              allGenes = geneList,
+              geneSelectionFun = function(x)(x == 1),
+              annot = annFUN.gene2GO,
+              gene2GO = geneID2GO)
+
+# ==="topGO"# === RUN FISHER TEST ===
+resultFisher <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
+
+# === OUTPUT RESULTS ===
+goResults <- GenTable(GOdata,
+                      classicFisher = resultFisher,
+                      topNodes = 20)
+
+print(goResults)
+write.csv(goResults, file = paste(paste(paste(paste("results/", cluster, sep = ""), "_enr", sep= ""), annot_type, sep = ""), ".csv", sep = ""), row.names = FALSE)
+topGO::printGraph(GOdata, resultFisher, firstSigNodes = 10, useInfo = "def", pdfSW = TRUE, fn.prefix = sprintf("figures/%s_tree_%s", cluster, annot_type))
+}
+}
+```
+
+```{r egg-clusters-to-mobile-go}
+mob_go <- as.data.frame(fread("data/emobile_annotations.tsv", sep = "\t")[,c(1,10)])
+mob_geneID2GO <- mob_go %>%
+  mutate(GO_list = strsplit(GOs, "[,|]")) %>%
+  dplyr::select(`#query`, GO_list) %>%
+  deframe()
+
+for (cluster in c("e_4.1", "e_4.2", "e_4.3", "e_4.4", "e_4.5")){
+  geneList <- factor(as.integer(all_genes %in% eval(parse(text = paste(cluster, "_names", sep ="")))$`#query`))
+  names(geneList) <- all_genes
+  
+  for (annot_type in c("BP", "CC", "MF")){
+# === CREATE topGO OBJECT ===
+  GOdata <- new("topGOdata",
+              ontology = annot_type,  # Can be "BP", "MF", or "CC"
+              allGenes = geneList,
+              geneSelectionFun = function(x)(x == 1),
+              annot = annFUN.gene2GO,
+              gene2GO = mob_geneID2GO)
+
+# ==="topGO"# === RUN FISHER TEST ===
+resultFisher <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
+
+# === OUTPUT RESULTS ===
+goResults <- GenTable(GOdata,
+                      classicFisher = resultFisher,
+                      topNodes = 20)
+
+print(goResults)
+}
+}
+```
+
+```{r load-tom-data}
+ # get the necessary information from the eggNOG output file
+
+# read the total transcriptome (universe)
+ttotal <- fread("data/ttotal_annotations.tsv", sep = "\t")
+head(ttotal)
+
+# read in the gene names of the clusters and mobile set
+tmobile_names <- fread("data/tmobile_annotations.tsv", sep = "\t", select = 1)
+head(tmobile_names)
+
+t_4.1_names <- fread("data/t_4.1_annotations.tsv", sep = "\t", select = 1)
+t_4.2_names <- fread("data/t_4.2_annotations.tsv", sep = "\t", select = 1)
+t_4.3_names <- fread("data/t_4.3_annotations.tsv", sep = "\t", select = 1)
+t_4.4_names <- fread("data/t_4.4_annotations.tsv", sep = "\t", select = 1)
+t_4.5_names <- fread("data/t_4.5_annotations.tsv", sep = "\t", select = 1)
+```
+
+```{r tom-mobile_to_transcriptome_go}
+go <- as.data.frame(ttotal[,c(1,10)])
+geneID2GO <- go %>%
+  mutate(GO_list = strsplit(GOs, "[,|]")) %>%
+  dplyr::select(`#query`, GO_list) %>%
+  deframe()
+
+# Make a named factor (1 = DEG, 0 = background)
+all_genes <- ttotal$`#query`
+str(all_genes)
+mob_geneList <- factor(as.integer(all_genes %in% tmobile_names$`#query`))
+str(mob_geneList)
+names(mob_geneList) <- all_genes
+tail(mob_geneList)
+
+
+for (annot_type in c("BP", "CC", "MF")){
+# === CREATE topGO OBJECT ===
+  GOdata <- new("topGOdata",
+              ontology = annot_type,  # Can be "BP", "MF", or "CC"
+              allGenes = mob_geneList,
+              geneSelectionFun = function(x)(x == 1),
+              annot = annFUN.gene2GO,
+              gene2GO = geneID2GO)
+
+# ==="topGO"# === RUN FISHER TEST ===
+resultFisher <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
+
+# === OUTPUT RESULTS ===
+goResults <- GenTable(GOdata,
+                      classicFisher = resultFisher,
+                      topNodes = 20)
+
+print(goResults)
+write.csv(goResults, file = paste(paste("results/tmobile_enr", annot_type, sep = ""), ".csv", sep = ""), row.names = FALSE)
+topGO::printGraph(GOdata, resultFisher, firstSigNodes = 10, useInfo = "def", pdfSW = TRUE, fn.prefix = sprintf("figures/ttree_%s", annot_type))
+}
+```
+
+```{r egg-clusters_to_transcriptome_go}
 for (cluster in c("e_4.1", "e_4.2", "e_4.3", "e_4.4", "e_4.5")){
   geneList <- factor(as.integer(all_genes %in% eval(parse(text = paste(cluster, "_names", sep ="")))$`#query`))
   names(geneList) <- all_genes
